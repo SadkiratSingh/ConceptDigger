@@ -9,6 +9,7 @@ import time
 import re
 import socket
 import json
+import copy
 
 #CONFIGURE
 address = "" #blank probably means 'listen on ALL IPs'
@@ -23,8 +24,8 @@ createFresh = True
 
 # CONFIGURE
 #dataFolderPrefix = '/media/sb/0ecc919c-e385-49d7-b59a-ec4dd463df75/'
-dataFolderPrefix = 'debug_data/'
-dataFolderPrefix = 'new_debug_data'
+#dataFolderPrefix = 'debug_data/'
+dataFolderPrefix = 'new_debug_data/'
 
 '''[pseudocode]
 load dbpedia nodes (their synonyms and classification) from HDD file to RAM Tree object
@@ -32,12 +33,12 @@ load dbpedia nodes (their synonyms and classification) from HDD file to RAM Tree
 
 graph = Graph()
 nodesDict = {}
-i = 1
+name_map = graph.new_vertex_property("string")
+synonyms_map = graph.new_vertex_property("vector<string>")
 
 def insertNodes(fromFile, predicateKeyword):
     t2 = time.time()
     print ("processing " + fromFile + " ...")
-    i = len(nodesDict)
     f = open(fromFile, 'r')
     for line in f.readlines():
         # if ntriple line is trying to tell about a new category
@@ -48,25 +49,27 @@ def insertNodes(fromFile, predicateKeyword):
             obj = line[line.rfind("resource/")+9:line.rfind(">")]
             
             #if node is note already added in graph, then create a new node for it
-            if nodesDict.has_key(subject) == False :
-                nodesDict[subject] = i
-                graph.add_node(i, {"name":subject,"synonyms":[[convertEntityURItoLabel(subject) ,fromFile]]})
-                i = i + 1
-            if nodesDict.has_key(obj) == False :
-                nodesDict[obj] = i
-                graph.add_node(i, {"name":obj,"synonyms":[[convertEntityURItoLabel(obj),fromFile]]})
-                i = i + 1
+            if subject not in nodesDict :
+                node = graph.add_vertex()
+                nodesDict[subject] = graph.vertex_index[node]
+                name_map[node] = subject
+                synonyms_map[node].append(convertEntityURItoLabel(subject))
+            if obj not in nodesDict :
+                node = graph.add_vertex()
+                nodesDict[obj] = graph.vertex_index[node]
+                name_map[node] = obj
+                synonyms_map[node].append(convertEntityURItoLabel(obj))
 
             #add an edge to depict the child-parent relation
             childNode = nodesDict[subject]
             parentNode = nodesDict[obj]              
-            graph.add_edge(parentNode,childNode)
+            graph.add_edge(graph.vertex(parentNode),graph.vertex(childNode))
     f.close()
     t3 = time.time()
     print ("processed " + fromFile + " in " + str(t3-t2) + " seconds") 
 
 def convertEntityURItoLabel(entity_URI):
-    return entity_URI.replace("_"," ").replace(" (disambiguation)","").lower()
+    return entity_URI.replace("_"," ").lower()
 
 def assignSynonymFromLiteral(fromFile, predicateKeywords):
     t2 = time.time()
@@ -142,20 +145,20 @@ def assignSynonymFromURI(fromFile, predicateKeywords):
 if createFresh == False:
     print ('Loading CACHE of graph data from hardisk..')
     t0 = time.time()
-    graph = pickle.load (open(dataFolderPrefix + "graph.pickle","rb"))
+    graph = load_graph(dataFolderPrefix + "wiki_graph.gt")
     nodesDict = pickle.load (open(dataFolderPrefix + "nodesDict.pickle","rb"))
     t1 = time.time()
     print ("Time to load CACHE of graph data (from pickle files) = " + str(t1-t0))
 else:
     t0 = time.time()
     i = 1
-    insertNodes(dataFolderPrefix + "skos_categories_en.nt", "/skos/core#broader")
-    insertNodes(dataFolderPrefix + "article_categories_en.nt", "purl.org/dc/terms/subject")
-    assignSynonymFromLiteral(dataFolderPrefix + "labels_en.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
-    assignSynonymFromLiteral(dataFolderPrefix + "bold_keywords.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
-    assignSynonymFromLiteral(dataFolderPrefix + "mappingbased_properties_en.nt", ['http://dbpedia.org/property/name','http://dbpedia.org/property/alternateName','http://xmlns.com/foaf/0.1/name','http://dbpedia.org/ontology/alias'])
-    assignSynonymFromURI(dataFolderPrefix + "disambiguations_en.nt", ['http://dbpedia.org/ontology/wikiPageDisambiguates'])
-    assignSynonymFromURI(dataFolderPrefix + "redirects_en.nt", ['http://dbpedia.org/ontology/wikiPageRedirects'])
+    insertNodes(dataFolderPrefix + "categories_skos.ttl", "/skos/core#broader")
+    insertNodes(dataFolderPrefix + "categories_articles.ttl", "purl.org/dc/terms/subject")
+    #assignSynonymFromLiteral(dataFolderPrefix + "labels_en.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
+    #assignSynonymFromLiteral(dataFolderPrefix + "bold_keywords.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
+    #assignSynonymFromLiteral(dataFolderPrefix + "mappingbased_properties_en.nt", ['http://dbpedia.org/property/name','http://dbpedia.org/property/alternateName','http://xmlns.com/foaf/0.1/name','http://dbpedia.org/ontology/alias'])
+    #assignSynonymFromURI(dataFolderPrefix + "disambiguations_en.nt", ['http://dbpedia.org/ontology/wikiPageDisambiguates'])
+    #assignSynonymFromURI(dataFolderPrefix + "redirects_en.nt", ['http://dbpedia.org/ontology/wikiPageRedirects'])
     t1 = time.time()
     print ("Graph loaded in : " + str(t1-t0) + " seconds")
 
@@ -175,7 +178,9 @@ else:
 
 
     print ("dumping pickle files")
-    pickle.dump(graph, open(dataFolderPrefix + "graph.pickle","wb"),protocol=2)
+    graph.vertex_properties["name-map"] = name_map
+    graph.vertex_properties["synonyms-map"] = synonyms_map
+    graph.save(dataFolderPrefix + "wiki_graph.gt")
     pickle.dump(nodesDict, open(dataFolderPrefix + "nodesDict.pickle","wb"),protocol=2)
 
 
@@ -191,19 +196,32 @@ enumerate through all leaf nodes, so that their synonym information can be extra
 '''
 # q = open('hierarchy_debug.log','wb')
 # q.write('Parent, Child\n')
-def enumerateChild(fromParent,curDepth,returnCategories,returnPages,seedCategoryParent):
-    parent = graph.node[fromParent]["name"]
-    
-    successors = graph.successors(fromParent)
+def enumerateChild(fromParent,curDepth,returnCategories,returnPages,seedCategoryParent,ancestors):
+    parentNode = graph.vertex(fromParent)
+    parentName = name_map[parentNode]
+    successors = graph.iter_out_neighbors(parentNode)
+    ancestors.append(parentName)
+    a_list = copy.deepcopy(ancestors)
     for child in successors:
-        childName = graph.node[child]["name"]
+        childNodeData = {}
+        childName = name_map[graph.vertex(child)]
+        print(childName)
         if childName[0:9] == 'Category:':
+            if curDepth < maxDepth: enumerateChild(child,curDepth+1,returnCategories,returnPages,seedCategoryParent,ancestors)
             if returnCategories==1:
-                enumeratedChildInList.append(child)
-            if curDepth < maxDepth: enumerateChild(child,curDepth+1,returnCategories,returnPages,seedCategoryParent)
+                childNodeData["index"] = child
+                childNodeData["name"] = childName
+                childNodeData["level"] = curDepth
+                childNodeData["ancestors"] = a_list
+                enumeratedChildInList.append(childNodeData)
         else:
             if returnPages==1:
-                enumeratedChildInList.append(child)
+                childNodeData["index"] = child
+                childNodeData["name"] = childName
+                childNodeData["level"] = curDepth
+                childNodeData["ancestors"] = a_list
+                enumeratedChildInList.append(childNodeData)
+    ancestors.pop()
 
 #         if childName[0:9] == 'Category:':
 #             if returnCategories==1:
@@ -249,16 +267,17 @@ accept seed category under which child pages and their synonyms are to be extrac
 # @profile
 def prepareOutput():
     output = []
-    for child in set(enumeratedChildInList):
+    print(len(enumeratedChildInList))
+    for child in enumeratedChildInList:
 #         entity_url = graph.node[child[0]]['name']
 #         seed_category = graph.node[child[1]]['name']
 #         for synonym in graph.node[child[0]]['synonyms']:
-        entity_url = graph.node[child]['name']
-        seed_category = graph.node[child]['name']
-        for synonym in graph.node[child]['synonyms']:
-            surface_text = synonym[0]
-            how_this_record = synonym[1]
-            output.append('{{"entity_url" : "DBPedia>{0}","surface_text" : "{1}","seed_category" : "{2}","how_this_record" : "{3}"}}\n'.format(entity_url, surface_text, seed_category, how_this_record))
+        entity_url = child["name"]
+        seed_category = child["name"]
+        level = child["level"]
+        ancestors = child["ancestors"]
+        synonyms = synonyms_map[graph.vertex(child["index"])]
+        output.append('{{"entity_url" : "DBPedia>{0}","surface_text" : "{1}","seed_category" : "{2}","level" : "{3}","ancestors" : "{4}"}}\n'.format(entity_url, synonyms, seed_category, level, ancestors))
 #             output = (output + '{"entity_url" : "DBPedia>' + entity_url + '","surface_text" : "' + surface_text  + '","seed_category" : "' + seed_category  + '","how_this_record" : "' + how_this_record + '"}\n')
     return "".join(output)
 
@@ -295,15 +314,20 @@ while True:
         seedCategoryNode = nodesDict[seedCategory]
     
         #enumerate through all leaf nodes
-        enumerateChild(seedCategoryNode,0,returnCategories,returnPages, seedCategoryNode)
+        enumerateChild(seedCategoryNode,0,returnCategories,returnPages, seedCategoryNode,[])
     t1 = time.time()
     print ("Children enumerated in " + str(t1-t0) + " seconds")
     
     '''[pseudocode]
     extract synonyms of each node. return JSON file which can be imported in CP to train our Noisy NER
     '''
-    t0 = time.time()              
-    conn.send(prepareOutput()) 
+    t0 = time.time() 
+    output = prepareOutput()  
+    print(output)
+    output_file = open(dataFolderPrefix + "output.txt", "w");
+    output_file.write(output)
+    output_file.close()           
+    conn.send(output.encode()) 
     conn.close()
     t1 = time.time()
     print ("Reply sent in " + str(t1-t0) + " seconds")
