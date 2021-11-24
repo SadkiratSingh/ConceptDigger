@@ -26,8 +26,8 @@ createFresh = True
 # CONFIGURE
 #dataFolderPrefix = '/media/sb/0ecc919c-e385-49d7-b59a-ec4dd463df75/'
 #dataFolderPrefix = 'debug_data/'
-#dataFolderPrefix = 'new_debug_data/'
-dataFolderPrefix = "extractedttlfiles/"
+dataFolderPrefix = 'new_debug_data/'
+#dataFolderPrefix = "extractedttlfiles/"
 
 '''[pseudocode]
 load dbpedia nodes (their synonyms and classification) from HDD file to RAM Tree object
@@ -169,14 +169,14 @@ if createFresh == False:
 else:
     t0 = time.time()
     i = 1
-    insertNodes(dataFolderPrefix + "categories_lang=en_skos.ttl", "/skos/core#broader")
-    insertNodes(dataFolderPrefix + "categories_lang=en_articles.ttl", "purl.org/dc/terms/subject")
+    insertNodes(dataFolderPrefix + "categories_skos.ttl", "/skos/core#broader")
+    insertNodes(dataFolderPrefix + "categories_articles.ttl", "purl.org/dc/terms/subject")
     #assignSynonymFromLiteral(dataFolderPrefix + "labels_en.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
     #assignSynonymFromLiteral(dataFolderPrefix + "bold_keywords.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
     #assignSynonymFromLiteral(dataFolderPrefix + "mappingbased_properties_en.nt", ['http://dbpedia.org/property/name','http://dbpedia.org/property/alternateName','http://xmlns.com/foaf/0.1/name','http://dbpedia.org/ontology/alias'])
     #assignSynonymFromURI(dataFolderPrefix + "disambiguations_en.nt", ['http://dbpedia.org/ontology/wikiPageDisambiguates'])
-    assignSynonymFromURI(dataFolderPrefix + "redirects_lang=en.ttl", ['http://dbpedia.org/ontology/wikiPageRedirects'])
-    assignSynonymFromURI(dataFolderPrefix + "mappingbased-objects_lang=en.ttl" , ['http://dbpedia.org/ontology/type','http://dbpedia.org/ontology/hasVariant','http://www.w3.org/2000/01/rdf-schema#seeAlso'])
+    assignSynonymFromURI(dataFolderPrefix + "redirects_resources.ttl", ['http://dbpedia.org/ontology/wikiPageRedirects'])
+    assignSynonymFromURI(dataFolderPrefix + "variants_resources.ttl" , ['http://dbpedia.org/ontology/type','http://dbpedia.org/ontology/hasVariant','http://www.w3.org/2000/01/rdf-schema#seeAlso'])
     t1 = time.time()
     print ("Graph loaded in : " + str(t1-t0) + " seconds")
 

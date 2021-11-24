@@ -1,8 +1,8 @@
 from pymongo import MongoClient
 def get_database():
-    HOST = "35.193.77.13"
+    HOST = "127.0.0.1"
     PORT = "27017"
-    CONNECTION_STRING = f"mongodb://admin:******@{HOST}:{PORT}"
+    CONNECTION_STRING = f"mongodb://{HOST}:{PORT}"
     client = MongoClient(CONNECTION_STRING)
     return client["WikiConcepts"]
 
