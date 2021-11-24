@@ -4,6 +4,7 @@ Created on 14-Jan-2015
 @author: tushar@solutionbeyond.net
 '''
 from graph_tool.all import *
+from mongonlx.dbaccess.writetodb import insert_one_concept
 import pickle
 import time
 import re
@@ -25,7 +26,8 @@ createFresh = True
 # CONFIGURE
 #dataFolderPrefix = '/media/sb/0ecc919c-e385-49d7-b59a-ec4dd463df75/'
 #dataFolderPrefix = 'debug_data/'
-dataFolderPrefix = 'new_debug_data/'
+#dataFolderPrefix = 'new_debug_data/'
+dataFolderPrefix = "extractedttlfiles/"
 
 '''[pseudocode]
 load dbpedia nodes (their synonyms and classification) from HDD file to RAM Tree object
@@ -35,6 +37,9 @@ graph = Graph()
 nodesDict = {}
 name_map = graph.new_vertex_property("string")
 synonyms_map = graph.new_vertex_property("vector<string>")
+variants_map = graph.new_vertex_property("vector<string>")
+references_map = graph.new_vertex_property("vector<string>")
+type_map = graph.new_vertex_property("string")
 
 def insertNodes(fromFile, predicateKeyword):
     t2 = time.time()
@@ -69,7 +74,7 @@ def insertNodes(fromFile, predicateKeyword):
     print ("processed " + fromFile + " in " + str(t3-t2) + " seconds") 
 
 def convertEntityURItoLabel(entity_URI):
-    return entity_URI.replace("_"," ").lower()
+    return entity_URI.replace("_"," ")
 
 def assignSynonymFromLiteral(fromFile, predicateKeywords):
     t2 = time.time()
@@ -105,7 +110,6 @@ def assignSynonymFromLiteral(fromFile, predicateKeywords):
 def assignSynonymFromURI(fromFile, predicateKeywords):
     t2 = time.time()
     print ("processing " + fromFile + " ...")
-    i = len(nodesDict)
     f = open(fromFile, 'r')
     #p = open("debug.log",'wb')
 
@@ -117,28 +121,41 @@ def assignSynonymFromURI(fromFile, predicateKeywords):
                 #extract the object
                 obj = line[line.rfind("resource/")+9:line.rfind(">")]
 
-#                 try:
                 #extract label of URI
-                if nodesDict.has_key(subject) == False :
-                    nodesDict[subject] = i
-                    label = convertEntityURItoLabel(subject)
-                    graph.add_node(i, {"name":subject,"synonyms":[[label,fromFile]]})
-                    i = i + 1
+                if keyword != "http://dbpedia.org/ontology/wikiPageRedirects":
+                    if subject not in nodesDict :
+                        node = graph.add_vertex()
+                        node_index = graph.vertex_index[node]
+                        nodesDict[subject] = node_index
+                        name_map[node] = subject
+                        label = convertEntityURItoLabel(obj)
+                        synonyms_map[node].append(label)
 
-                if nodesDict.has_key(obj) == False :
-                    nodesDict[obj] = i
+                if obj not in nodesDict :
+                    node = graph.add_vertex()
+                    node_index = graph.vertex_index[node]
+                    nodesDict[obj] = node_index
+                    name_map[node] = obj
                     label = convertEntityURItoLabel(obj)
-                    graph.add_node(i, {"name":obj,"synonyms":[[label,fromFile]]})
-                    i = i + 1
+                    synonyms_map[node].append(label)
 
-                label = graph.node[nodesDict[subject]]['synonyms'][0][0]
-                label = label.lower().replace(" (disambiguation)","")
-                if [e for e in graph.node[nodesDict[obj]]['synonyms'] if e[0] == label] == []:
-                    graph.node[nodesDict[obj]]['synonyms'].append([label,fromFile])
-#                 except Exception,e:
-#                     print 'couldnt write : ' + line + ".  because : " + str(Exception)
+                if keyword == "http://dbpedia.org/ontology/wikiPageRedirects":
+                    object_node = graph.vertex(nodesDict[obj])
+                    if [e for e in synonyms_map[object_node] if e == subject] == []:
+                        synonyms_map[object_node].append(subject)
+                elif keyword == "http://dbpedia.org/ontology/type":
+                    subject_node = graph.vertex(nodesDict[subject])
+                    type_map[subject_node] = obj
+                elif keyword == "http://dbpedia.org/ontology/hasVariant":
+                    subject_node = graph.vertex(nodesDict[subject])
+                    if [e for e in variants_map[subject_node] if e == obj] == []:
+                        variants_map[subject_node].append(obj)
+                elif keyword == "http://www.w3.org/2000/01/rdf-schema#seeAlso":
+                    subject_node = graph.vertex(nodesDict[subject])
+                    if [e for e in references_map[subject_node] if e == obj] == []:
+                        references_map[subject_node].append(obj)
+
     f.close()
-#     p.close()
     t3 = time.time()
     print ("processed " + fromFile + " in " + str(t3-t2) + " seconds") 
 
@@ -152,13 +169,14 @@ if createFresh == False:
 else:
     t0 = time.time()
     i = 1
-    insertNodes(dataFolderPrefix + "categories_skos.ttl", "/skos/core#broader")
-    insertNodes(dataFolderPrefix + "categories_articles.ttl", "purl.org/dc/terms/subject")
+    insertNodes(dataFolderPrefix + "categories_lang=en_skos.ttl", "/skos/core#broader")
+    insertNodes(dataFolderPrefix + "categories_lang=en_articles.ttl", "purl.org/dc/terms/subject")
     #assignSynonymFromLiteral(dataFolderPrefix + "labels_en.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
     #assignSynonymFromLiteral(dataFolderPrefix + "bold_keywords.nt", ['http://www.w3.org/2000/01/rdf-schema#label'])
     #assignSynonymFromLiteral(dataFolderPrefix + "mappingbased_properties_en.nt", ['http://dbpedia.org/property/name','http://dbpedia.org/property/alternateName','http://xmlns.com/foaf/0.1/name','http://dbpedia.org/ontology/alias'])
     #assignSynonymFromURI(dataFolderPrefix + "disambiguations_en.nt", ['http://dbpedia.org/ontology/wikiPageDisambiguates'])
-    #assignSynonymFromURI(dataFolderPrefix + "redirects_en.nt", ['http://dbpedia.org/ontology/wikiPageRedirects'])
+    assignSynonymFromURI(dataFolderPrefix + "redirects_lang=en.ttl", ['http://dbpedia.org/ontology/wikiPageRedirects'])
+    assignSynonymFromURI(dataFolderPrefix + "mappingbased-objects_lang=en.ttl" , ['http://dbpedia.org/ontology/type','http://dbpedia.org/ontology/hasVariant','http://www.w3.org/2000/01/rdf-schema#seeAlso'])
     t1 = time.time()
     print ("Graph loaded in : " + str(t1-t0) + " seconds")
 
@@ -180,6 +198,9 @@ else:
     print ("dumping pickle files")
     graph.vertex_properties["name-map"] = name_map
     graph.vertex_properties["synonyms-map"] = synonyms_map
+    graph.vertex_properties["variants-map"] = variants_map
+    graph.vertex_properties["references-map"] = references_map
+    graph.vertex_properties["type-map"] = type_map
     graph.save(dataFolderPrefix + "wiki_graph.gt")
     pickle.dump(nodesDict, open(dataFolderPrefix + "nodesDict.pickle","wb"),protocol=2)
 
@@ -205,7 +226,6 @@ def enumerateChild(fromParent,curDepth,returnCategories,returnPages,seedCategory
     for child in successors:
         childNodeData = {}
         childName = name_map[graph.vertex(child)]
-        print(childName)
         if childName[0:9] == 'Category:':
             if curDepth < maxDepth: enumerateChild(child,curDepth+1,returnCategories,returnPages,seedCategoryParent,ancestors)
             if returnCategories==1:
@@ -267,18 +287,34 @@ accept seed category under which child pages and their synonyms are to be extrac
 # @profile
 def prepareOutput():
     output = []
-    print(len(enumeratedChildInList))
     for child in enumeratedChildInList:
-#         entity_url = graph.node[child[0]]['name']
-#         seed_category = graph.node[child[1]]['name']
-#         for synonym in graph.node[child[0]]['synonyms']:
+
         entity_url = child["name"]
-        seed_category = child["name"]
         level = child["level"]
         ancestors = child["ancestors"]
-        synonyms = synonyms_map[graph.vertex(child["index"])]
-        output.append('{{"entity_url" : "DBPedia>{0}","surface_text" : "{1}","seed_category" : "{2}","level" : "{3}","ancestors" : "{4}"}}\n'.format(entity_url, synonyms, seed_category, level, ancestors))
-#             output = (output + '{"entity_url" : "DBPedia>' + entity_url + '","surface_text" : "' + surface_text  + '","seed_category" : "' + seed_category  + '","how_this_record" : "' + how_this_record + '"}\n')
+        start_category = ancestors[0]
+        end_category = ancestors[len(ancestors)-1]
+        synonyms = list(synonyms_map[graph.vertex(child["index"])])
+        print(synonyms)
+        references = list(references_map[graph.vertex(child["index"])])
+        variants = list(variants_map[graph.vertex(child["index"])])
+        types = type_map[graph.vertex(child["index"])]
+        surface_text = synonyms[0]
+        concept_doc = {
+            "entity_url":f"http://en.wikipedia.org/wiki/{entity_url}",
+            "surface_text": surface_text,
+            "synonyms": synonyms,
+            "level": level,
+            "start_category": start_category,
+            "end_category": end_category,
+            "references": references,
+            "variants": variants,
+            "types": types
+        }
+        insert_one_concept(concept_doc)
+        out_str = f"entity_url : http://en.wikipedia.org/wiki/{entity_url}, surface_text : {surface_text}, synonyms : {synonyms}, level : {level}, start_category : {start_category}, end_category : {end_category}, references: {references}, variants: {variants}, type: {types}\n"
+        output.append(out_str)
+
     return "".join(output)
 
 sok = socket.socket()
@@ -322,22 +358,8 @@ while True:
     extract synonyms of each node. return JSON file which can be imported in CP to train our Noisy NER
     '''
     t0 = time.time() 
-    output = prepareOutput()  
-    print(output)
-    output_file = open(dataFolderPrefix + "output.txt", "w");
-    output_file.write(output)
-    output_file.close()           
+    output = prepareOutput()          
     conn.send(output.encode()) 
     conn.close()
     t1 = time.time()
     print ("Reply sent in " + str(t1-t0) + " seconds")
-#     f = open('output.txt','wb')
-#     f.write(output)
-#     f.close()
-#         
-# #         except Exception,e:
-# #             print Exception.message
-# except KeyboardInterrupt:
-#     print '\nShutting down. Make a take a few seconds/minutes to free up all the memory..'
-#     exit()
-
