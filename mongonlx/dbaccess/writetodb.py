@@ -1,11 +1,12 @@
 from mongonlx.config.mongoconn import db
 
-collections = ["concepts", "real_concepts", "food_ingridients"]
+def col_name_lang(col_name, lang_code):
+    name = f"{col_name}_{lang_code}"
+    return db[name]
 
-concepts_col = db["food_ingridients"]
+# def insert_many_concepts(docs):
+#     concepts_col.insert_many(docs)
 
-def insert_many_concepts(docs):
-    concepts_col.insert_many(docs)
-
-def insert_one_concept(doc):
-    concepts_col.insert_one(doc)
+def insert_one_concept(doc,colname,lang_code):
+    col_name_lang(colname, lang_code).insert_one(doc)
+ 
