@@ -7,9 +7,9 @@ from os.path import expanduser
 from graph_tool.all import *
 
 
-class GraphHandler:
+class GraphCreator:
     def __init__(self, create_fresh: bool, datafolderprefix: str, language_code: str):
-        graph_loc = expanduser("~") + "/train-lexical-analyzer" + "/ConceptDigger"
+        graph_loc = expanduser("~") + "/wikipedia-digger" + "/ConceptDigger"
         os.chdir(graph_loc)
         self._graph = Graph()
         self._nodesdict = {}
@@ -17,9 +17,9 @@ class GraphHandler:
         self._create_fresh = create_fresh
         self._language_code = language_code
         if(self._create_fresh == True):
-            self._construct_graph_from_scratch()
+            self.__construct_graph_from_scratch()
         else:
-            self._load_graph_from_disk()
+            self.__load_graph_from_disk()
     
     @property
     def _graph(self):
@@ -135,18 +135,18 @@ class GraphHandler:
 
                     if keyword == "http://dbpedia.org/ontology/wikiPageRedirects":
                         object_node = self._graph.vertex(self._nodesdict[obj])
-                        if [e for e in self._maps["synonyms_map"][object_node] if e == subject] == []:
+                        if subject not in self._maps["synonyms_map"][object_node]:
                             self._maps["synonyms_map"][object_node].append(subject)
                     elif keyword == "http://dbpedia.org/ontology/type":
                         subject_node = self._graph.vertex(self._nodesdict[subject])
                         self._maps["type_map"][subject_node] = obj
                     elif keyword == "http://dbpedia.org/ontology/hasVariant":
                         subject_node = self._graph.vertex(self._nodesdict[subject])
-                        if [e for e in self._maps["variants_map"][subject_node] if e == obj] == []:
+                        if obj not in self._maps["variants_map"][subject_node]:
                             self._maps["variants_map"][subject_node].append(obj)
                     elif keyword == "http://www.w3.org/2000/01/rdf-schema#seeAlso":
                         subject_node = self._graph.vertex(self._nodesdict[subject])
-                        if [e for e in self._maps["references_map"][subject_node] if e == obj] == []:
+                        if obj not in self._maps["references_map"][subject_node]:
                             self._maps["references_map"][subject_node].append(obj)
 
         f.close()
@@ -174,7 +174,7 @@ class GraphHandler:
             else:
                 self._graph.vertex_properties[key] = self._maps[key]
     
-    def _construct_graph_from_scratch(self):
+    def __construct_graph_from_scratch(self):
         self.__assign_property_maps()
         self._maps["language_code"][self._graph] = self._language_code
         t0 = time.time()
@@ -186,13 +186,15 @@ class GraphHandler:
         print ("Graph loaded in : " + str(t1-t0) + " seconds")
         self.__save_graph_to_disk()
 
+        return self._graph, self._maps, self._language_code, self._nodesdict
+
     def __save_graph_to_disk(self):
         self.__internalize_property_maps()
         print ("dumping pickle files")
         self._graph.save(self._datafolderprefix + "wiki_graph.gt")
         pickle.dump(self._nodesdict, open(self._datafolderprefix + "nodesDict.pickle","wb"), protocol=2)
 
-    def _load_graph_from_disk(self):
+    def __load_graph_from_disk(self):
         print ('Loading CACHE of graph data from hardisk..')
         t0 = time.time()
         self._graph = load_graph(self._datafolderprefix + "wiki_graph.gt")
@@ -202,3 +204,6 @@ class GraphHandler:
         self._language_code = self._maps["language_code"]
         t1 = time.time()
         print ("Time to load CACHE of graph data (from pickle files) = " + str(t1-t0))
+
+        return self._graph, self._maps, self._language_code, self._nodesdict
+    
