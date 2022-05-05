@@ -64,98 +64,116 @@ class GraphCreator:
         self.__maps = val
 
     def __insert_nodes(self, filename, predicate_keyword):
-        t2 = time.time()
+        t0 = time.time()
         print ("processing " + filename + " ...")
         f = open(filename, 'r')
+        
         for line in f.readlines():
             if line.find(predicate_keyword)>0:
-                #extract the subject - which is actually the child node
+                #extract the subject - which is actually the child resource(article or subcategory) node
                 match_obj = re.search("^<http://.{2}\.", line)
                 if match_obj is None:
                     subject = line[29:line.find(">",29)]
                 else:
                     subject = line[32:line.find(">",32)]
-                #extract the object - which is actually the parent node
+                #extract the object - which is actually the parent resource(category) node
                 obj = line[line.rfind("resource/")+9:line.rfind(">")]
                 
-                #if node is note already added in graph, then create a new node for it
+                #if node is not in the graph, then create a new node for it
                 if subject not in self._nodesdict :
                     node = self._graph.add_vertex()
                     self._nodesdict[subject] = self._graph.vertex_index[node]
                     self._maps["name_map"][node] = subject
-                    self._maps["synonyms_map"][node].append(self.__convert_entity_URI_to_label(subject))
+                    self._maps["synonyms_map"][node].append(self.__clean_text(subject))
+                    
                 if obj not in self._nodesdict :
                     node = self._graph.add_vertex()
                     self._nodesdict[obj] = self._graph.vertex_index[node]
                     self._maps["name_map"][node] = obj
-                    self._maps["synonyms_map"][node].append(self.__convert_entity_URI_to_label(obj))
+                    self._maps["synonyms_map"][node].append(self.__clean_text(obj))
 
                 #add an edge to depict the child-parent relation
                 childNode = self._nodesdict[subject]
                 parentNode = self._nodesdict[obj]              
                 self._graph.add_edge(self._graph.vertex(parentNode),self._graph.vertex(childNode))
+                
         f.close()
-        t3 = time.time()
-        print ("processed " + filename + " in " + str(t3-t2) + " seconds") 
+        t1 = time.time()
+        print ("processed " + filename + " in " + str(t1-t0) + " seconds") 
     
-    def __assignSynonymFromURI(self, filename, predicate_keywords):
-        t2 = time.time()
+    def __assignSynonymFromURI(self, filename, predicate_keyword):
+        t0 = time.time()
         print ("processing " + filename + " ...")
         f = open(filename, 'r')
 
         for line in f.readlines():
+            if line.find(predicate_keyword)>0:
+                #extract the subject which will be treated as synonym node
+                match_obj = re.search("^<http://.{2}\.", line)
+                if match_obj is None:
+                    subject = line[29:line.find(">",29)]
+                else:
+                    subject = line[32:line.find(">",32)]
+                #extract the object which will be treated as resource(article) node
+                obj = line[line.rfind("resource/")+9:line.rfind(">")]
+
+                
+                if subject not in self._nodesdict:
+                    node = self._graph.add_vertex()
+                    self._nodesdict[subject] = self._graph.vertex_index[node]
+                    self._maps["name_map"][node] = subject
+                    self._maps["synonyms_map"][node].append(self.__clean_text(subject))
+
+                if obj not in self._nodesdict :
+                    node = self._graph.add_vertex()
+                    self._nodesdict[obj] = self._graph.vertex_index[node]
+                    self._maps["name_map"][node] = obj
+                    self._maps["synonyms_map"][node].append(self.__clean_text(obj))
+                
+                refined_subject = self.__clean_text(subject)
+                
+                if refined_subject not in self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[obj])]:
+                    self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[obj])].append(refined_subject)
+
+        f.close()
+        t1 = time.time()
+        print ("processed " + filename + " in " + str(t1-t0) + " seconds") 
+
+    def __assignSynonymFromLiteral(self, filename, predicate_keywords):
+        t0 = time.time()
+        print ("processing " + filename + " ...")
+        f = open(filename, 'r')
+        
+        for line in f.readlines():
             for keyword in predicate_keywords:
                 if line.find(keyword)>0:
-                    #extract the subject
+                    
+                    #extract the subject which will be treated as resource(article) node
                     match_obj = re.search("^<http://.{2}\.", line)
                     if match_obj is None:
                         subject = line[29:line.find(">",29)]
                     else:
                         subject = line[32:line.find(">",32)]
-                    #extract the object
-                    obj = line[line.rfind("resource/")+9:line.rfind(">")]
-
-                    #extract label of URI
-                    if keyword != "http://dbpedia.org/ontology/wikiPageRedirects":
-                        if subject not in self._nodesdict:
-                            node = self._graph.add_vertex()
-                            node_index = self._graph.vertex_index[node]
-                            self._nodesdict[subject] = node_index
-                            self._maps["name_map"][node] = subject
-                            label = self.__convert_entity_URI_to_label(obj)
-                            self._maps["synonyms_map"][node].append(label)
-
-                    if obj not in self._nodesdict :
+                        
+                    #extract the object which will be a literal
+                    searchObj = re.search('".*"', line) #searches for literal enclosed between "double quotes"
+                    obj = searchObj.group()[1:-1] #removes the trailing and beginning double quote character from literal
+                    obj = obj.lower()
+                    
+                    if subject not in self._nodesdict:
                         node = self._graph.add_vertex()
-                        node_index = self._graph.vertex_index[node]
-                        self._nodesdict[obj] = node_index
-                        self._maps["name_map"][node] = obj
-                        label = self.__convert_entity_URI_to_label(obj)
-                        self._maps["synonyms_map"][node].append(label)
-
-                    if keyword == "http://dbpedia.org/ontology/wikiPageRedirects":
-                        object_node = self._graph.vertex(self._nodesdict[obj])
-                        if subject not in self._maps["synonyms_map"][object_node]:
-                            self._maps["synonyms_map"][object_node].append(subject)
-                    elif keyword == "http://dbpedia.org/ontology/type":
-                        subject_node = self._graph.vertex(self._nodesdict[subject])
-                        self._maps["type_map"][subject_node] = obj
-                    elif keyword == "http://dbpedia.org/ontology/hasVariant":
-                        subject_node = self._graph.vertex(self._nodesdict[subject])
-                        if obj not in self._maps["variants_map"][subject_node]:
-                            self._maps["variants_map"][subject_node].append(obj)
-                    elif keyword == "http://www.w3.org/2000/01/rdf-schema#seeAlso":
-                        subject_node = self._graph.vertex(self._nodesdict[subject])
-                        if obj not in self._maps["references_map"][subject_node]:
-                            self._maps["references_map"][subject_node].append(obj)
-
+                        self._nodesdict[subject] = self._graph.vertex_index[node]
+                        self._maps["name_map"][node] = subject
+                        self._maps["synonyms_map"][node].append(self.__clean_text(subject))
+                        
+                    if obj not in self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[subject])]:
+                        self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[subject])].append(obj)
         f.close()
-        t3 = time.time()
-        print ("processed " + filename + " in " + str(t3-t2) + " seconds") 
-
+        t1 = time.time()
+        print ("processed " + filename + " in " + str(t1-t0) + " seconds") 
     
-    def __convert_entity_URI_to_label(self, entity_URI):
-        return entity_URI.replace("_"," ")
+    def __clean_text(self, text):
+        return text.replace("(disambiguation)","")
     
     def __assign_property_maps(self):
         self._maps = {
@@ -180,8 +198,9 @@ class GraphCreator:
         t0 = time.time()
         self.__insert_nodes(self._datafolderprefix + f"categories_lang={self._language_code}_skos.ttl", "/skos/core#broader")
         self.__insert_nodes(self._datafolderprefix + f"categories_lang={self._language_code}_articles.ttl", "purl.org/dc/terms/subject")
-        self.__assignSynonymFromURI(self._datafolderprefix + f"redirects_lang={self._language_code}.ttl", ['http://dbpedia.org/ontology/wikiPageRedirects'])
-        self.__assignSynonymFromURI(self._datafolderprefix + f"mappingbased-objects_lang={self._language_code}.ttl" , ['http://dbpedia.org/ontology/type','http://dbpedia.org/ontology/hasVariant','http://www.w3.org/2000/01/rdf-schema#seeAlso'])
+        self.__assignSynonymFromURI(self._datafolderprefix + f"redirects_lang={self._language_code}.ttl", 'http://dbpedia.org/ontology/wikiPageRedirects')
+        self.__assignSynonymFromURI(self._datafolderprefix + f"disambiguations_lang={self._language_code}.ttl", "http://dbpedia.org/ontology/wikiPageDisambiguates")
+        self.__assignSynonymFromLiteral(self._datafolderprefix + f"mappingbased-literals_lang={self._language_code}.ttl" , ["http://dbpedia.org/ontology/alias", "http://xmlns.com/foaf/0.1/name"])
         t1 = time.time()
         print ("Graph loaded in : " + str(t1-t0) + " seconds")
         self.__save_graph_to_disk()
