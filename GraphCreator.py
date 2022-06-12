@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 import re
@@ -84,13 +85,19 @@ class GraphCreator:
                     node = self._graph.add_vertex()
                     self._nodesdict[subject] = self._graph.vertex_index[node]
                     self._maps["name_map"][node] = subject
-                    self._maps["synonyms_map"][node].append(self.__clean_text(subject))
+                    
+                    #TODO: subject is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                    synonym_details = json.dumps({"value": self.__clean_text(subject), "source": "http://dbpedia.org/resource/"})
+                    self._maps["synonyms_map"][node].append(synonym_details)
                     
                 if obj not in self._nodesdict :
                     node = self._graph.add_vertex()
                     self._nodesdict[obj] = self._graph.vertex_index[node]
                     self._maps["name_map"][node] = obj
-                    self._maps["synonyms_map"][node].append(self.__clean_text(obj))
+                    
+                    #TODO: object is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                    synonym_details = json.dumps({"value": self.__clean_text(obj), "source": "http://dbpedia.org/resource/"})
+                    self._maps["synonyms_map"][node].append(synonym_details)
 
                 #add an edge to depict the child-parent relation
                 childNode = self._nodesdict[subject]
@@ -122,18 +129,26 @@ class GraphCreator:
                     node = self._graph.add_vertex()
                     self._nodesdict[subject] = self._graph.vertex_index[node]
                     self._maps["name_map"][node] = subject
-                    self._maps["synonyms_map"][node].append(self.__clean_text(subject))
+                    
+                    #TODO: subject is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                    synonym_details = json.dumps({"value": self.__clean_text(subject), "source": "http://dbpedia.org/resource/"})
+                    self._maps["synonyms_map"][node].append(synonym_details)
 
                 if obj not in self._nodesdict :
                     node = self._graph.add_vertex()
                     self._nodesdict[obj] = self._graph.vertex_index[node]
                     self._maps["name_map"][node] = obj
-                    self._maps["synonyms_map"][node].append(self.__clean_text(obj))
+                    
+                    #TODO: object is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                    synonym_details = json.dumps({"value": self.__clean_text(obj), "source": "http://dbpedia.org/resource/"})
+                    self._maps["synonyms_map"][node].append(synonym_details)
                 
-                refined_subject = self.__clean_text(subject)
+                object_has_synonym_subject = json.dumps({"value": self.__clean_text(subject), "source": predicate_keyword})
                 
-                if refined_subject not in self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[obj])]:
-                    self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[obj])].append(refined_subject)
+                if object_has_synonym_subject not in self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[obj])]:
+                    
+                    #TODO: refined_subject is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                    self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[obj])].append(object_has_synonym_subject)
 
         f.close()
         t1 = time.time()
@@ -164,10 +179,16 @@ class GraphCreator:
                         node = self._graph.add_vertex()
                         self._nodesdict[subject] = self._graph.vertex_index[node]
                         self._maps["name_map"][node] = subject
-                        self._maps["synonyms_map"][node].append(self.__clean_text(subject))
                         
-                    if obj not in self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[subject])]:
-                        self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[subject])].append(obj)
+                        #TODO: subject is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                        synonym_details = json.dumps({"value": self.__clean_text(subject), "source": "http://dbpedia.org/resource/"})
+                        self._maps["synonyms_map"][node].append(synonym_details)
+                    
+                    subject_has_synonym_object = json.dumps({"value": obj, "source": keyword})  
+                    if subject_has_synonym_object not in self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[subject])]:
+                        
+                        #TODO: object is a string here but we will add metadata for synonym(for eg. score, source etc.) as well in the form of JSON string
+                        self._maps["synonyms_map"][self._graph.vertex(self._nodesdict[subject])].append(subject_has_synonym_object)
         f.close()
         t1 = time.time()
         print ("processed " + filename + " in " + str(t1-t0) + " seconds") 

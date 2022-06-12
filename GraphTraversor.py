@@ -7,6 +7,7 @@ from owlready2 import *
 
 from GraphCreator import GraphCreator
 from utilities.constants import category_word_language_mapping
+from OntologyManager import Ontology_Manager
 
 
 
@@ -19,8 +20,6 @@ class GraphTraversor(GraphCreator):
         self._address = "" 
         self._port = 5009
         
-        onto_path.append("/home/sadkiratsinghubuntu/wikipedia-digger/ConceptDigger/{datafolderprefix}")
-        
         #start the service and process the input
         self._sok = socket.socket()        
         self._start_service()
@@ -32,13 +31,6 @@ class GraphTraversor(GraphCreator):
         for s in symbols_list:
             entity = entity.replace(s, "")
         return entity
-    
-    @staticmethod
-    def defineAnnotationProperties(onto):
-        with onto:
-            class has_synonym(AnnotationProperty):pass
-        with onto:
-            class has_uri(AnnotationProperty):pass
     
     def _prepare_ontology(self,parentId,onto_parent_class,curDepth,maxDepth,onto):
         with onto:
@@ -59,20 +51,28 @@ class GraphTraversor(GraphCreator):
                 child_onto_ancestors = [c.name for c in list(onto[onto_parent_class.name].ancestors())]
                 
                 if refined_child_uri not in child_onto_ancestors:
-                    onto_child_class = types.new_class(refined_child_uri, tuple([onto_parent_class]))
-                    print(f"child category---> {refined_child_uri}")
-                    print(f"parent category--->{onto_parent_class}")
-                    onto[onto_child_class.name].label.append(child_uri)
-                    onto[onto_child_class.name].has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{child_uri}")
+                    print(f"child class---> {refined_child_uri}")
+                    print(f"parent class--->{onto_parent_class}")
+                    
+                    child_class=Ontology_Manager.add_class_pair(refined_child_uri, onto_parent_class)
+                    child_class.label.append(child_uri)
+                    child_class.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{child_uri}")
                     
                     if child_uri[0:len(category_word)+1] == f'{category_word}:':
                         
                         if curDepth < maxDepth: 
-                            self._prepare_ontology(child,onto_child_class,curDepth+1,maxDepth,onto)
+                            self._prepare_ontology(child,child_class,curDepth+1,maxDepth,onto)
                             
                     else:
                         synonyms_list = list(synonyms_map[graph.vertex(child)])
-                        onto[onto_child_class.name].has_synonym = synonyms_list
+                        for synonym_detail_string in synonyms_list:
+                            #TODO: than just simply adding synonyms here, we will add some annotations to each synonym as well.
+                            synonym_details = json.loads(synonym_detail_string)
+                            synonym_value = synonym_details["value"]
+                            synonym_source = synonym_details["source"]
+                            child_class.has_synonym.append(synonym_value)
+                            onto.has_synonym_source[child_class, onto.has_synonym,synonym_value] = [synonym_source]
+                            
             
     def _start_service(self):
         self._sok.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -90,33 +90,38 @@ class GraphTraversor(GraphCreator):
                 t0 = time.time() 
             
                 seedCategory = subcategory[0]
-                ontology_name = subcategory[1]
-                maxDepth =  subcategory[2]
-                print ('seedCategory = ' + seedCategory)
-                print ('maxDepth = ' + str(maxDepth))
-
-                seedCategoryId = self._nodesdict[seedCategory]
-                rel_ontology_filename = f"{ontology_name}.owl"
-                abs_ontology_filename = f"/home/sadkiratsinghubuntu/wikipedia-digger/ConceptDigger/{self._datafolderprefix}{rel_ontology_filename}"
-                if(os.path.isfile(abs_ontology_filename)):
-                    os.remove(abs_ontology_filename)
-                    
-                #initialize empty ontology
-                onto = get_ontology(abs_ontology_filename)
-                
-                #define annotation properties for the ontology
-                GraphTraversor.defineAnnotationProperties(onto)
-                
-                with onto:
+                maxDepth =  subcategory[1]
+                ontology_name = subcategory[2]
+                create_new_ontology = subcategory[3]
+                delete_existing_ontology = subcategory[4]
+            
+                Ontology_Manager.set_ontology_name(ontology_name)
+                if(bool(delete_existing_ontology)):
+                    Ontology_Manager.delete_ontology()
+                else:
+                    Ontology_Manager.load_ontology(bool(int(create_new_ontology)))
+                    onto = Ontology_Manager.ontology
+                    print ('seedCategory = ' + seedCategory)
+                    print ('maxDepth = ' + str(maxDepth))
+                    seedCategoryId = self._nodesdict[seedCategory]             
                     refined_seed_category = GraphTraversor.cleanText(seedCategory)
-                    onto_parent_class = types.new_class((refined_seed_category),tuple([Thing]))
-                    onto[onto_parent_class.name].label.append(seedCategory)
-                    onto[onto_parent_class.name].has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{seedCategory}")
-                self._prepare_ontology(seedCategoryId,onto_parent_class,0,maxDepth,onto)
-                onto.save(abs_ontology_filename)
+                    
+                    # TODO: check if this seed class already exists in ontology
+                    seed_class = None
+                    seed_class_exists = onto.search(iri=f"{onto.base_iri}{refined_seed_category}")
+                    if(len(seed_class_exists) == 0):
+                        seed_class = Ontology_Manager.add_class_pair(refined_seed_category)
+                        seed_class.label.append(seedCategory)
+                        seed_class.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{seedCategory}")
+                    else:
+                        seed_class = seed_class_exists[0]
+                    self._prepare_ontology(seedCategoryId,seed_class,0,maxDepth,onto)
+                    
+                    Ontology_Manager.saving_ontology_to_files()
+                    Ontology_Manager.commit_changes_to_quadstore()
 
-                t1 = time.time()      
-                conn.send(f"ontology perpared for {seedCategory} in {str(t1-t0)} seconds".encode())
+                    t1 = time.time()      
+                    conn.send(f"{seedCategory} ontology appended in {str(t1-t0)} seconds".encode())
 
             conn.close()
 
