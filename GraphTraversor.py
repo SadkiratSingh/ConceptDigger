@@ -75,7 +75,8 @@ class GraphTraversor(GraphCreator):
                             synonym_value = synonym_details["value"]
                             synonym_source = synonym_details["source"]
                             child_individual.has_synonym.append(synonym_value)
-                            onto.has_synonym_source[child_individual, onto.has_synonym,synonym_value] = [synonym_source]
+                            synonym_sources = onto.has_synonym_source[child_individual, onto.has_synonym,synonym_value]
+                            synonym_sources.append(synonym_source)
                             
             
     def _start_service(self):
