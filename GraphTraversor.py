@@ -3,6 +3,7 @@ import json
 import socket
 import time
 import types
+import re
 from owlready2 import *
 
 from GraphCreator import GraphCreator
@@ -27,9 +28,11 @@ class GraphTraversor(GraphCreator):
     
     @staticmethod
     def cleanText(entity):
-        symbols_list = ["'", '"', "(", ")"]
-        for s in symbols_list:
-            entity = entity.replace(s, "")
+        pattern = re.compile(r"[^A-Za-z\.0-9\_\-\:]")
+        symbols_to_escape = pattern.findall(entity)
+        for s in symbols_to_escape:
+            entity = entity.replace(s, "_")
+        entity = entity.strip("_")
         return entity
     
     def _prepare_ontology(self,parentId,onto_parent_class,curDepth,maxDepth,onto):
@@ -53,25 +56,26 @@ class GraphTraversor(GraphCreator):
                 if refined_child_uri not in child_onto_ancestors:
                     print(f"child class---> {refined_child_uri}")
                     print(f"parent class--->{onto_parent_class}")
-                    
-                    child_class=Ontology_Manager.add_class_pair(refined_child_uri, onto_parent_class)
-                    child_class.label.append(child_uri)
-                    child_class.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{child_uri}")
-                    
+                                        
                     if child_uri[0:len(category_word)+1] == f'{category_word}:':
-                        
+                        child_class=Ontology_Manager.add_class_pair(refined_child_uri, onto_parent_class)
+                        child_class.label.append(child_uri)
+                        child_class.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{child_uri}")
                         if curDepth < maxDepth: 
                             self._prepare_ontology(child,child_class,curDepth+1,maxDepth,onto)
                             
                     else:
+                        child_individual = onto_parent_class(refined_child_uri)
+                        child_individual.label.append(child_uri)
+                        child_individual.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{child_uri}")
                         synonyms_list = list(synonyms_map[graph.vertex(child)])
                         for synonym_detail_string in synonyms_list:
                             #TODO: than just simply adding synonyms here, we will add some annotations to each synonym as well.
                             synonym_details = json.loads(synonym_detail_string)
                             synonym_value = synonym_details["value"]
                             synonym_source = synonym_details["source"]
-                            child_class.has_synonym.append(synonym_value)
-                            onto.has_synonym_source[child_class, onto.has_synonym,synonym_value] = [synonym_source]
+                            child_individual.has_synonym.append(synonym_value)
+                            onto.has_synonym_source[child_individual, onto.has_synonym,synonym_value] = [synonym_source]
                             
             
     def _start_service(self):
