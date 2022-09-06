@@ -35,7 +35,7 @@ class GraphTraversor(GraphCreator):
         entity = entity.strip("_")
         return entity
     
-    def _prepare_ontology(self,parentId,onto_parent_class,curDepth,maxDepth,onto):
+    def _prepare_ontology(self,parentId,onto_parent_class,curDepth,maxDepth,onto,categories_processed_set):
         with onto:
             graph = self._graph
             name_map = self._maps["name_map"]
@@ -61,8 +61,9 @@ class GraphTraversor(GraphCreator):
                         child_class=Ontology_Manager.add_class_pair(refined_child_uri, onto_parent_class)
                         child_class.label.append(child_uri)
                         child_class.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{child_uri}")
-                        if curDepth < maxDepth: 
-                            self._prepare_ontology(child,child_class,curDepth+1,maxDepth,onto)
+                        if curDepth < maxDepth and child_class.name not in categories_processed_set:
+                            categories_processed_set.add(child_class.name) 
+                            self._prepare_ontology(child,child_class,curDepth+1,maxDepth,onto,categories_processed_set)
                             
                     else:
                         child_individual = onto_parent_class(refined_child_uri)
@@ -114,13 +115,15 @@ class GraphTraversor(GraphCreator):
                     # TODO: check if this seed class already exists in ontology
                     seed_class = None
                     seed_class_exists = onto.search(iri=f"{onto.base_iri}{refined_seed_category}")
+                    categories_processed_set = set()
                     if(len(seed_class_exists) == 0):
                         seed_class = Ontology_Manager.add_class_pair(refined_seed_category)
                         seed_class.label.append(seedCategory)
                         seed_class.has_uri.append(f"https://{self._language_code}.wikipedia.org/wiki/{seedCategory}")
                     else:
                         seed_class = seed_class_exists[0]
-                    self._prepare_ontology(seedCategoryId,seed_class,0,maxDepth,onto)
+                    categories_processed_set.add(seed_class.name)
+                    self._prepare_ontology(seedCategoryId,seed_class,0,maxDepth,onto,categories_processed_set)
                     
                     Ontology_Manager.saving_ontology_to_files()
                     Ontology_Manager.commit_changes_to_quadstore()

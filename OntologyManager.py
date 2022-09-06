@@ -1,8 +1,10 @@
 from owlready2 import *
+from utilities.constants import home_dir
 import types
 
+
 class Ontology_Manager:
-    prefix_dir = "/home/sadkiratsinghubuntu/wikipedia-digger/ConceptDigger/data-store"
+    prefix_dir = f"{home_dir}/wikipedia-digger/ConceptDigger/data-store"
     onto_path.append(prefix_dir)
     default_world.set_backend(filename=f"{prefix_dir}/quadstore.sqlite3")
     ontology_iri = ""
